@@ -16,6 +16,7 @@ export const useSocket = (role: 'student' | 'teacher', name: string) => {
     const [participants, setParticipants] = useState<any[]>([]);
     const [chatMessages, setChatMessages] = useState<MessageData[]>([]);
     const [kickedOut, setKickedOut] = useState(false);
+    const [history, setHistory] = useState<any[]>([]);
 
     useEffect(() => {
         if (!name) return;
@@ -59,6 +60,10 @@ export const useSocket = (role: 'student' | 'teacher', name: string) => {
             newSocket.disconnect();
         });
 
+        newSocket.on('poll_history', (data) => {
+            setHistory(data);
+        });
+
         return () => {
             newSocket.disconnect();
         };
@@ -70,6 +75,7 @@ export const useSocket = (role: 'student' | 'teacher', name: string) => {
         pollResults,
         participants,
         chatMessages,
-        kickedOut
+        kickedOut,
+        history
     };
 };

@@ -31,14 +31,29 @@ app.get('/health', (req, res) => {
 // Setup Socket.io connections
 handleSocketConnections(io);
 
-// Connect to MongoDB and start server
-mongoose.connect(MONGO_URI)
-    .then(() => {
+// Start server immediately so it doesn't crash if DB is down
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
+// Connect to MongoDB
+const connectDB = () => {
+    mongoose.connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 5000 // Timeout early to prevent hanging
+    }).then(() => {
         console.log('Connected to MongoDB');
-        server.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
-        });
-    })
-    .catch((err) => {
-        console.error('Failed to connect to MongoDB', err);
+    }).catch((err) => {
+        console.error('Failed to connect to MongoDB, will not crash server:', err.message);
     });
+};
+
+connectDB();
+
+// Handle unexpected MongoDB disconnections gracefully
+mongoose.connection.on('disconnected', () => {
+    console.log('MongoDB disconnected');
+});
+
+mongoose.connection.on('error', (err) => {
+    console.error('MongoDB connection error:', err.message);
+});

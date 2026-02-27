@@ -23,21 +23,23 @@ export const handleSocketConnections = (io: Server) => {
                 }
             }
 
-            // Check for active poll and send to newly connected client to ensure resilience
-            const activePoll = await pollService.getActivePoll();
-            if (activePoll) {
-                socket.emit('poll_active', activePoll);
+            try {
+                // Check for active poll and send to newly connected client to ensure resilience
+                const activePoll = await pollService.getActivePoll();
+                if (activePoll) {
+                    socket.emit('poll_active', activePoll);
+                } else {
+                    socket.emit('poll_inactive');
+                }
 
-                // Return their current vote if they have one so UI reflects they voted already
-                // Implementation note: we need their vote info.
-            } else {
-                socket.emit('poll_inactive');
-            }
-
-            // Send the participant list update to Teachers
-            if (data.role === 'student' || data.role === 'teacher') {
-                const participants = await Participant.find({ isActive: true });
-                io.emit('participants_update', participants);
+                // Send the participant list update to Teachers
+                if (data.role === 'student' || data.role === 'teacher') {
+                    const participants = await Participant.find({ isActive: true });
+                    io.emit('participants_update', participants);
+                }
+            } catch (err) {
+                console.error("Failed to fetch initial state due to DB error", err);
+                socket.emit('error', { message: 'Database temporarily unreachable. Please try again later.' });
             }
         });
 
@@ -94,22 +96,30 @@ export const handleSocketConnections = (io: Server) => {
 
         // Handle kick request
         socket.on('kick_student', async (data: { studentName: string }) => {
-            const participant = await Participant.findOne({ name: data.studentName });
-            if (participant) {
-                io.to(participant.socketId).emit('kicked_out', { message: "You have been removed by the teacher." });
-                participant.isActive = false;
-                await participant.save();
-                const participants = await Participant.find({ isActive: true });
-                io.emit('participants_update', participants);
+            try {
+                const participant = await Participant.findOne({ name: data.studentName });
+                if (participant) {
+                    io.to(participant.socketId).emit('kicked_out', { message: "You have been removed by the teacher." });
+                    participant.isActive = false;
+                    await participant.save();
+                    const participants = await Participant.find({ isActive: true });
+                    io.emit('participants_update', participants);
+                }
+            } catch (err) {
+                console.error("Failed to kick student due to DB error:", err);
             }
         });
 
         socket.on('disconnect', async () => {
             console.log(`Disconnected: ${socket.id}`);
-            // Mark participant inactive
-            await Participant.updateMany({ socketId: socket.id }, { isActive: false });
-            const participants = await Participant.find({ isActive: true });
-            io.emit('participants_update', participants);
+            try {
+                // Mark participant inactive
+                await Participant.updateMany({ socketId: socket.id }, { isActive: false });
+                const participants = await Participant.find({ isActive: true });
+                io.emit('participants_update', participants);
+            } catch (err) {
+                console.error("Failed to update participant on disconnect due to DB error:", err);
+            }
         });
     });
 };
